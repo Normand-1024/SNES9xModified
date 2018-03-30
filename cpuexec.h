@@ -232,6 +232,7 @@ extern uint8			S9xOpLengthsM0X0[256];
 
 void S9xMainLoop (void);
 void S9xReset (void);
+void S9xResetSimulation (void);
 void S9xSoftReset (void);
 void S9xDoHEventProcessing (void);
 

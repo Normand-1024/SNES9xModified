@@ -204,6 +204,9 @@
 #include "movie.h"
 #include "display.h"
 #include "language.h"
+#include <string>
+#include <cstring>
+#include <algorithm>
 
 #ifndef min
 #define min(a,b)	(((a) < (b)) ? (a) : (b))
@@ -1177,9 +1180,15 @@ static int UnfreezeBlock (STREAM, const char *, uint8 *, int);
 static int UnfreezeBlockCopy (STREAM, const char *, uint8 **, int);
 static int UnfreezeStruct (STREAM, const char *, void *, FreezeData *, int, int);
 static int UnfreezeStructCopy (STREAM, const char *, uint8 **, FreezeData *, int, int);
+static int UnfreezeBlockFromString(std::stringstream&, const char *, uint8 *, int);
+static int UnfreezeBlockCopyFromString(std::stringstream&, const char *, uint8 **, int);
+static int UnfreezeStructFromString(std::stringstream&, const char *, void *, FreezeData *, int, int);
+static int UnfreezeStructCopyFromString(std::stringstream&, const char *, uint8 **, FreezeData *, int, int);
 static void UnfreezeStructFromCopy (void *, FreezeData *, int, uint8 *, int);
 static void FreezeBlock (STREAM, const char *, uint8 *, int);
-static void FreezeStruct (STREAM, const char *, void *, FreezeData *, int);
+static void FreezeBlockToString(std::stringstream&, const char *, uint8 *, int);
+static void FreezeStruct(STREAM, const char *, void *, FreezeData *, int);
+static void FreezeStructToString(std::stringstream&, const char *, void *, FreezeData *, int);
 
 
 void S9xResetSaveTimer (bool8 dontsave)
@@ -1240,6 +1249,160 @@ bool8 S9xFreezeGame (const char *filename)
 	return (FALSE);
 }
 
+std::stringstream FreezeState()
+{
+	std::stringstream stream;
+
+	stream.str("");
+
+	char	buffer[8192];
+	uint8	*soundsnapshot = new uint8[SPC_SAVE_STATE_BLOCK_SIZE];
+
+	sprintf(buffer, "%s:%04d\n", SNAPSHOT_MAGIC, SNAPSHOT_VERSION);
+	//WRITE_STREAM(buffer, strlen(buffer), stream);
+	stream << buffer;
+
+	sprintf(buffer, "NAM:%06d:%s%c", (int)strlen(Memory.ROMFilename) + 1, Memory.ROMFilename, 0);
+	//WRITE_STREAM(buffer, strlen(buffer) + 1, stream);
+	stream << buffer << " ";
+
+	FreezeStructToString(stream, "CPU", &CPU, SnapCPU, COUNT(SnapCPU));
+
+	FreezeStructToString(stream, "REG", &Registers, SnapRegisters, COUNT(SnapRegisters));
+
+	FreezeStructToString(stream, "PPU", &PPU, SnapPPU, COUNT(SnapPPU));
+
+	struct SDMASnapshot	dma_snap;
+	for (int d = 0; d < 8; d++)
+		dma_snap.dma[d] = DMA[d];
+	FreezeStructToString(stream, "DMA", &dma_snap, SnapDMA, COUNT(SnapDMA));
+
+	FreezeBlockToString(stream, "VRA", Memory.VRAM, 0x10000);
+
+	FreezeBlockToString(stream, "RAM", Memory.RAM, 0x20000);
+
+	FreezeBlockToString(stream, "SRA", Memory.SRAM, 0x20000);
+
+	FreezeBlockToString(stream, "FIL", Memory.FillRAM, 0x8000);
+
+	//S9xAPUSaveState(soundsnapshot);
+	//FreezeBlockToString(stream, "SND", soundsnapshot, SPC_SAVE_STATE_BLOCK_SIZE);
+
+	struct SControlSnapshot	ctl_snap;
+	S9xControlPreSaveState(&ctl_snap);
+	FreezeStructToString(stream, "CTL", &ctl_snap, SnapControls, COUNT(SnapControls));
+
+	FreezeStructToString(stream, "TIM", &Timings, SnapTimings, COUNT(SnapTimings));
+
+	if (Settings.SuperFX)
+	{
+		GSU.avRegAddr = (uint8 *)&GSU.avReg;
+		FreezeStructToString(stream, "SFX", &GSU, SnapFX, COUNT(SnapFX));
+	}
+
+	if (Settings.SA1)
+	{
+		S9xSA1PackStatus();
+		FreezeStructToString(stream, "SA1", &SA1, SnapSA1, COUNT(SnapSA1));
+		FreezeStructToString(stream, "SAR", &SA1Registers, SnapSA1Registers, COUNT(SnapSA1Registers));
+	}
+
+	if (Settings.DSP == 1)
+		FreezeStructToString(stream, "DP1", &DSP1, SnapDSP1, COUNT(SnapDSP1));
+
+	if (Settings.DSP == 2)
+		FreezeStructToString(stream, "DP2", &DSP2, SnapDSP2, COUNT(SnapDSP2));
+
+	if (Settings.DSP == 4)
+		FreezeStructToString(stream, "DP4", &DSP4, SnapDSP4, COUNT(SnapDSP4));
+
+	if (Settings.C4)
+		FreezeBlockToString(stream, "CX4", Memory.C4RAM, 8192);
+
+	if (Settings.SETA == ST_010)
+		FreezeStructToString(stream, "ST0", &ST010, SnapST010, COUNT(SnapST010));
+
+	if (Settings.OBC1)
+	{
+		FreezeStructToString(stream, "OBC", &OBC1, SnapOBC1, COUNT(SnapOBC1));
+		FreezeBlockToString(stream, "OBM", Memory.OBC1RAM, 8192);
+	}
+
+	if (Settings.SPC7110)
+	{
+		S9xSPC7110PreSaveState();
+		FreezeStructToString(stream, "S71", &s7snap, SnapSPC7110Snap, COUNT(SnapSPC7110Snap));
+	}
+
+	if (Settings.SRTC)
+	{
+		S9xSRTCPreSaveState();
+		FreezeStructToString(stream, "SRT", &srtcsnap, SnapSRTCSnap, COUNT(SnapSRTCSnap));
+	}
+
+	if (Settings.SRTC || Settings.SPC7110RTC)
+		FreezeBlockToString(stream, "CLK", RTCData.reg, 20);
+
+	if (Settings.BS)
+		FreezeStructToString(stream, "BSX", &BSX, SnapBSX, COUNT(SnapBSX));
+
+	if (Settings.MSU1)
+		FreezeStructToString(stream, "MSU", &MSU1, SnapMSU1, COUNT(SnapMSU1));
+
+	if (Settings.SnapshotScreenshots)
+	{
+		SnapshotScreenshotInfo	*ssi = new SnapshotScreenshotInfo;
+
+		ssi->Width = min(IPPU.RenderedScreenWidth, MAX_SNES_WIDTH);
+		ssi->Height = min(IPPU.RenderedScreenHeight, MAX_SNES_HEIGHT);
+		ssi->Interlaced = GFX.DoInterlace;
+
+		uint8	*rowpix = ssi->Data;
+		uint16	*screen = GFX.Screen;
+
+		for (int y = 0; y < ssi->Height; y++, screen += GFX.RealPPL)
+		{
+			for (int x = 0; x < ssi->Width; x++)
+			{
+				uint32	r, g, b;
+
+				DECOMPOSE_PIXEL(screen[x], r, g, b);
+				*(rowpix++) = r;
+				*(rowpix++) = g;
+				*(rowpix++) = b;
+			}
+		}
+
+		memset(rowpix, 0, sizeof(ssi->Data) + ssi->Data - rowpix);
+
+		FreezeStructToString(stream, "SHO", ssi, SnapScreenshot, COUNT(SnapScreenshot));
+
+		delete ssi;
+	}
+
+	if (S9xMovieActive())
+	{
+		uint8	*movie_freeze_buf;
+		uint32	movie_freeze_size;
+
+		S9xMovieFreeze(&movie_freeze_buf, &movie_freeze_size);
+		if (movie_freeze_buf)
+		{
+			struct SnapshotMovieInfo mi;
+
+			mi.MovieInputDataSize = movie_freeze_size;
+			FreezeStructToString(stream, "MOV", &mi, SnapMovie, COUNT(SnapMovie));
+			FreezeBlockToString(stream, "MID", movie_freeze_buf, movie_freeze_size);
+
+			delete[] movie_freeze_buf;
+		}
+	}
+
+	delete[] soundsnapshot;
+
+	return stream;
+}
+
 int S9xUnfreezeGameMem (const uint8 *buf, uint32 bufSize)
 {
     memStream stream(buf, bufSize);
@@ -1254,6 +1417,7 @@ bool8 S9xUnfreezeGame (const char *filename)
 	char	drive[_MAX_DRIVE + 1], dir[_MAX_DIR + 1], def[_MAX_FNAME + 1], ext[_MAX_EXT + 1];
 
 	const char	*base = S9xBasename(filename);
+	fprintf(stdout, "\nfile<<%s\n", filename);
 
 	_splitpath(filename, drive, dir, def, ext);
 	S9xResetSaveTimer(!strcmp(ext, "oops") || !strcmp(ext, "oop") || !strcmp(ext, ".oops") || !strcmp(ext, ".oop"));
@@ -1318,6 +1482,483 @@ bool8 S9xUnfreezeGame (const char *filename)
 	S9xMessage(S9X_INFO, S9X_FREEZE_FILE_INFO, String);
 
 	return (FALSE);
+}
+
+bool8 UnfreezeState(std::stringstream& stream)
+{
+	//STREAM	stream = NULL;
+	char	drive[_MAX_DRIVE + 1], dir[_MAX_DIR + 1], def[_MAX_FNAME + 1], ext[_MAX_EXT + 1];
+
+	// const char	*base = S9xBasename(filename);
+
+	//_splitpath(filename, drive, dir, def, ext);
+	S9xResetSaveTimer(!strcmp(ext, "oops") || !strcmp(ext, "oop") || !strcmp(ext, ".oops") || !strcmp(ext, ".oop"));
+
+	stream.seekg(stream.beg);
+	int		result = SUCCESS;
+	int		version, len;
+	char	buffer[PATH_MAX + 1];
+
+	len = strlen(SNAPSHOT_MAGIC) + 1 + 4 + 1;
+	stream.read(buffer, len);
+	if (false)//READ_STREAM(buffer, len, stream) != (unsigned int)len)
+		result = (WRONG_FORMAT);
+
+	if (strncmp(buffer, SNAPSHOT_MAGIC, strlen(SNAPSHOT_MAGIC)) != 0)
+		result = (WRONG_FORMAT);
+
+	version = atoi(&buffer[strlen(SNAPSHOT_MAGIC) + 1]);
+	if (version > SNAPSHOT_VERSION)
+		result = (WRONG_VERSION);
+
+	result = UnfreezeBlockFromString(stream, "NAM", (uint8 *)buffer, PATH_MAX);
+	if (result != SUCCESS)
+		return false;
+
+	uint8	*local_cpu = NULL;
+	uint8	*local_registers = NULL;
+	uint8	*local_ppu = NULL;
+	uint8	*local_dma = NULL;
+	uint8	*local_vram = NULL;
+	uint8	*local_ram = NULL;
+	uint8	*local_sram = NULL;
+	uint8	*local_fillram = NULL;
+	uint8	*local_apu_sound = NULL;
+	uint8	*local_control_data = NULL;
+	uint8	*local_timing_data = NULL;
+	uint8	*local_superfx = NULL;
+	uint8	*local_sa1 = NULL;
+	uint8	*local_sa1_registers = NULL;
+	uint8	*local_dsp1 = NULL;
+	uint8	*local_dsp2 = NULL;
+	uint8	*local_dsp4 = NULL;
+	uint8	*local_cx4_data = NULL;
+	uint8	*local_st010 = NULL;
+	uint8	*local_obc1 = NULL;
+	uint8	*local_obc1_data = NULL;
+	uint8	*local_spc7110 = NULL;
+	uint8	*local_srtc = NULL;
+	uint8	*local_rtc_data = NULL;
+	uint8	*local_bsx_data = NULL;
+	uint8	*local_msu1_data = NULL;
+	uint8	*local_screenshot = NULL;
+	uint8	*local_movie_data = NULL;
+
+	do
+	{
+		result = UnfreezeStructCopyFromString(stream, "CPU", &local_cpu, SnapCPU, COUNT(SnapCPU), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "REG", &local_registers, SnapRegisters, COUNT(SnapRegisters), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "PPU", &local_ppu, SnapPPU, COUNT(SnapPPU), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "DMA", &local_dma, SnapDMA, COUNT(SnapDMA), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "VRA", &local_vram, 0x10000);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "RAM", &local_ram, 0x20000);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "SRA", &local_sram, 0x20000);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "FIL", &local_fillram, 0x8000);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "SND", &local_apu_sound, SPC_SAVE_STATE_BLOCK_SIZE);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "CTL", &local_control_data, SnapControls, COUNT(SnapControls), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "TIM", &local_timing_data, SnapTimings, COUNT(SnapTimings), version);
+		if (result != SUCCESS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "SFX", &local_superfx, SnapFX, COUNT(SnapFX), version);
+		if (result != SUCCESS && Settings.SuperFX)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "SA1", &local_sa1, SnapSA1, COUNT(SnapSA1), version);
+		if (result != SUCCESS && Settings.SA1)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "SAR", &local_sa1_registers, SnapSA1Registers, COUNT(SnapSA1Registers), version);
+		if (result != SUCCESS && Settings.SA1)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "DP1", &local_dsp1, SnapDSP1, COUNT(SnapDSP1), version);
+		if (result != SUCCESS && Settings.DSP == 1)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "DP2", &local_dsp2, SnapDSP2, COUNT(SnapDSP2), version);
+		if (result != SUCCESS && Settings.DSP == 2)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "DP4", &local_dsp4, SnapDSP4, COUNT(SnapDSP4), version);
+		if (result != SUCCESS && Settings.DSP == 4)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "CX4", &local_cx4_data, 8192);
+		if (result != SUCCESS && Settings.C4)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "ST0", &local_st010, SnapST010, COUNT(SnapST010), version);
+		if (result != SUCCESS && Settings.SETA == ST_010)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "OBC", &local_obc1, SnapOBC1, COUNT(SnapOBC1), version);
+		if (result != SUCCESS && Settings.OBC1)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "OBM", &local_obc1_data, 8192);
+		if (result != SUCCESS && Settings.OBC1)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "S71", &local_spc7110, SnapSPC7110Snap, COUNT(SnapSPC7110Snap), version);
+		if (result != SUCCESS && Settings.SPC7110)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "SRT", &local_srtc, SnapSRTCSnap, COUNT(SnapSRTCSnap), version);
+		if (result != SUCCESS && Settings.SRTC)
+			break;
+
+		result = UnfreezeBlockCopyFromString(stream, "CLK", &local_rtc_data, 20);
+		if (result != SUCCESS && (Settings.SRTC || Settings.SPC7110RTC))
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "BSX", &local_bsx_data, SnapBSX, COUNT(SnapBSX), version);
+		if (result != SUCCESS && Settings.BS)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "MSU", &local_msu1_data, SnapMSU1, COUNT(SnapMSU1), version);
+		if (result != SUCCESS && Settings.MSU1)
+			break;
+
+		result = UnfreezeStructCopyFromString(stream, "SHO", &local_screenshot, SnapScreenshot, COUNT(SnapScreenshot), version);
+
+		SnapshotMovieInfo	mi;
+
+		result = UnfreezeStructFromString(stream, "MOV", &mi, SnapMovie, COUNT(SnapMovie), version);
+		if (result != SUCCESS)
+		{
+			if (S9xMovieActive())
+			{
+				result = NOT_A_MOVIE_SNAPSHOT;
+				break;
+			}
+		}
+		else
+		{
+			result = UnfreezeBlockCopyFromString(stream, "MID", &local_movie_data, mi.MovieInputDataSize);
+			if (result != SUCCESS)
+			{
+				if (S9xMovieActive())
+				{
+					result = NOT_A_MOVIE_SNAPSHOT;
+					break;
+				}
+			}
+
+			if (S9xMovieActive())
+			{
+				result = S9xMovieUnfreeze(local_movie_data, mi.MovieInputDataSize);
+				if (result != SUCCESS)
+					break;
+			}
+		}
+
+		result = SUCCESS;
+	} while (false);
+
+	if (result == SUCCESS)
+	{
+		uint32 old_flags = CPU.Flags;
+		uint32 sa1_old_flags = SA1.Flags;
+
+		S9xReset();
+
+		UnfreezeStructFromCopy(&CPU, SnapCPU, COUNT(SnapCPU), local_cpu, version);
+
+		UnfreezeStructFromCopy(&Registers, SnapRegisters, COUNT(SnapRegisters), local_registers, version);
+
+		UnfreezeStructFromCopy(&PPU, SnapPPU, COUNT(SnapPPU), local_ppu, version);
+
+		struct SDMASnapshot	dma_snap;
+		UnfreezeStructFromCopy(&dma_snap, SnapDMA, COUNT(SnapDMA), local_dma, version);
+
+		memcpy(Memory.VRAM, local_vram, 0x10000);
+
+		memcpy(Memory.RAM, local_ram, 0x20000);
+
+		memcpy(Memory.SRAM, local_sram, 0x20000);
+
+		memcpy(Memory.FillRAM, local_fillram, 0x8000);
+
+		/*if (version < SNAPSHOT_VERSION_BAPU) {
+			printf("Using Blargg APU snapshot loading (snapshot version %d, current is %d)\n...", version, SNAPSHOT_VERSION);
+			S9xAPULoadBlarggState(local_apu_sound);
+		}
+		else
+			S9xAPULoadState(local_apu_sound);*/
+
+		struct SControlSnapshot	ctl_snap;
+		UnfreezeStructFromCopy(&ctl_snap, SnapControls, COUNT(SnapControls), local_control_data, version);
+
+		UnfreezeStructFromCopy(&Timings, SnapTimings, COUNT(SnapTimings), local_timing_data, version);
+
+		if (local_superfx)
+		{
+			GSU.avRegAddr = (uint8 *)&GSU.avReg;
+			UnfreezeStructFromCopy(&GSU, SnapFX, COUNT(SnapFX), local_superfx, version);
+		}
+
+		if (local_sa1)
+			UnfreezeStructFromCopy(&SA1, SnapSA1, COUNT(SnapSA1), local_sa1, version);
+
+		if (local_sa1_registers)
+			UnfreezeStructFromCopy(&SA1Registers, SnapSA1Registers, COUNT(SnapSA1Registers), local_sa1_registers, version);
+
+		if (local_dsp1)
+			UnfreezeStructFromCopy(&DSP1, SnapDSP1, COUNT(SnapDSP1), local_dsp1, version);
+
+		if (local_dsp2)
+			UnfreezeStructFromCopy(&DSP2, SnapDSP2, COUNT(SnapDSP2), local_dsp2, version);
+
+		if (local_dsp4)
+			UnfreezeStructFromCopy(&DSP4, SnapDSP4, COUNT(SnapDSP4), local_dsp4, version);
+
+		if (local_cx4_data)
+			memcpy(Memory.C4RAM, local_cx4_data, 8192);
+
+		if (local_st010)
+			UnfreezeStructFromCopy(&ST010, SnapST010, COUNT(SnapST010), local_st010, version);
+
+		if (local_obc1)
+			UnfreezeStructFromCopy(&OBC1, SnapOBC1, COUNT(SnapOBC1), local_obc1, version);
+
+		if (local_obc1_data)
+			memcpy(Memory.OBC1RAM, local_obc1_data, 8192);
+
+		if (local_spc7110)
+			UnfreezeStructFromCopy(&s7snap, SnapSPC7110Snap, COUNT(SnapSPC7110Snap), local_spc7110, version);
+
+		if (local_srtc)
+			UnfreezeStructFromCopy(&srtcsnap, SnapSRTCSnap, COUNT(SnapSRTCSnap), local_srtc, version);
+
+		if (local_rtc_data)
+			memcpy(RTCData.reg, local_rtc_data, 20);
+
+		if (local_bsx_data)
+			UnfreezeStructFromCopy(&BSX, SnapBSX, COUNT(SnapBSX), local_bsx_data, version);
+
+		if (local_msu1_data)
+			UnfreezeStructFromCopy(&MSU1, SnapMSU1, COUNT(SnapMSU1), local_msu1_data, version);
+
+		if (version < SNAPSHOT_VERSION_IRQ)
+		{
+			printf("Converting old snapshot version %d to %d\n...", version, SNAPSHOT_VERSION);
+
+			CPU.NMILine = (CPU.Flags & (1 << 7)) ? TRUE : FALSE;
+			CPU.IRQLine = (CPU.Flags & (1 << 11)) ? TRUE : FALSE;
+			CPU.IRQTransition = FALSE;
+			CPU.IRQLastState = FALSE;
+			CPU.IRQExternal = (Obsolete.CPU_IRQActive & ~(1 << 1)) ? TRUE : FALSE;
+
+			switch (CPU.WhichEvent)
+			{
+			case 12:	case   1:	CPU.WhichEvent = 1; break;
+			case  2:	case   3:	CPU.WhichEvent = 2; break;
+			case  4:	case   5:	CPU.WhichEvent = 3; break;
+			case  6:	case   7:	CPU.WhichEvent = 4; break;
+			case  8:	case   9:	CPU.WhichEvent = 5; break;
+			case 10:	case  11:	CPU.WhichEvent = 6; break;
+			}
+
+			if (local_sa1) // FIXME
+			{
+				SA1.Cycles = SA1.PrevCycles = 0;
+				SA1.TimerIRQLastState = FALSE;
+				SA1.HTimerIRQPos = Memory.FillRAM[0x2212] | (Memory.FillRAM[0x2213] << 8);
+				SA1.VTimerIRQPos = Memory.FillRAM[0x2214] | (Memory.FillRAM[0x2215] << 8);
+				SA1.HCounter = 0;
+				SA1.VCounter = 0;
+				SA1.PrevHCounter = 0;
+				SA1.MemSpeed = SLOW_ONE_CYCLE;
+				SA1.MemSpeedx2 = SLOW_ONE_CYCLE * 2;
+			}
+		}
+
+		CPU.Flags |= old_flags & (DEBUG_MODE_FLAG | TRACE_FLAG | SINGLE_STEP_FLAG | FRAME_ADVANCE_FLAG);
+		ICPU.ShiftedPB = Registers.PB << 16;
+		ICPU.ShiftedDB = Registers.DB << 16;
+		S9xSetPCBase(Registers.PBPC);
+		S9xUnpackStatus();
+		S9xFixCycles();
+
+		for (int d = 0; d < 8; d++)
+			DMA[d] = dma_snap.dma[d];
+		CPU.InDMA = CPU.InHDMA = FALSE;
+		CPU.InDMAorHDMA = CPU.InWRAMDMAorHDMA = FALSE;
+		CPU.HDMARanInDMA = 0;
+
+		S9xFixColourBrightness();
+		IPPU.ColorsChanged = TRUE;
+		IPPU.OBJChanged = TRUE;
+		IPPU.RenderThisFrame = TRUE;
+
+		uint8 hdma_byte = Memory.FillRAM[0x420c];
+		S9xSetCPU(hdma_byte, 0x420c);
+
+		S9xControlPostLoadState(&ctl_snap);
+
+		if (local_superfx)
+		{
+			GSU.pfPlot = fx_PlotTable[GSU.vMode];
+			GSU.pfRpix = fx_PlotTable[GSU.vMode + 5];
+		}
+
+		if (local_sa1 && local_sa1_registers)
+		{
+			SA1.Flags |= sa1_old_flags & TRACE_FLAG;
+			S9xSA1PostLoadState();
+		}
+
+		if (Settings.SDD1)
+			S9xSDD1PostLoadState();
+
+		if (local_spc7110)
+			S9xSPC7110PostLoadState(version);
+
+		if (local_srtc)
+			S9xSRTCPostLoadState(version);
+
+		if (local_bsx_data)
+			S9xBSXPostLoadState();
+
+		if (local_msu1_data)
+			S9xMSU1PostLoadState();
+
+		if (local_movie_data)
+		{
+			// restore last displayed pad_read status
+			extern bool8	pad_read, pad_read_last;
+			bool8			pad_read_temp = pad_read;
+
+			pad_read = pad_read_last;
+			S9xUpdateFrameCounter(-1);
+			pad_read = pad_read_temp;
+		}
+
+		if (local_screenshot)
+		{
+			SnapshotScreenshotInfo	*ssi = new SnapshotScreenshotInfo;
+
+			UnfreezeStructFromCopy(ssi, SnapScreenshot, COUNT(SnapScreenshot), local_screenshot, version);
+
+			IPPU.RenderedScreenWidth = min(ssi->Width, IMAGE_WIDTH);
+			IPPU.RenderedScreenHeight = min(ssi->Height, IMAGE_HEIGHT);
+			const bool8 scaleDownX = IPPU.RenderedScreenWidth  < ssi->Width;
+			const bool8 scaleDownY = IPPU.RenderedScreenHeight < ssi->Height && ssi->Height > SNES_HEIGHT_EXTENDED;
+			GFX.DoInterlace = Settings.SupportHiRes ? ssi->Interlaced : 0;
+
+			uint8	*rowpix = ssi->Data;
+			uint16	*screen = GFX.Screen;
+
+			for (int y = 0; y < IPPU.RenderedScreenHeight; y++, screen += GFX.RealPPL)
+			{
+				for (int x = 0; x < IPPU.RenderedScreenWidth; x++)
+				{
+					uint32	r, g, b;
+
+					r = *(rowpix++);
+					g = *(rowpix++);
+					b = *(rowpix++);
+
+					if (scaleDownX)
+					{
+						r = (r + *(rowpix++)) >> 1;
+						g = (g + *(rowpix++)) >> 1;
+						b = (b + *(rowpix++)) >> 1;
+
+						if (x + x + 1 >= ssi->Width)
+							break;
+					}
+
+					screen[x] = BUILD_PIXEL(r, g, b);
+				}
+
+				if (scaleDownY)
+				{
+					rowpix += 3 * ssi->Width;
+					if (y + y + 1 >= ssi->Height)
+						break;
+				}
+			}
+
+			// black out what we might have missed
+			for (uint32 y = IPPU.RenderedScreenHeight; y < (uint32)(IMAGE_HEIGHT); y++)
+				memset(GFX.Screen + y * GFX.RealPPL, 0, GFX.RealPPL * 2);
+
+			delete ssi;
+		}
+		else
+		{
+			// couldn't load graphics, so black out the screen instead
+			for (uint32 y = 0; y < (uint32)(IMAGE_HEIGHT); y++)
+				memset(GFX.Screen + y * GFX.RealPPL, 0, GFX.RealPPL * 2);
+		}
+	}
+
+	if (local_cpu)				delete[] local_cpu;
+	if (local_registers)		delete[] local_registers;
+	if (local_ppu)				delete[] local_ppu;
+	if (local_dma)				delete[] local_dma;
+	if (local_vram)				delete[] local_vram;
+	if (local_ram)				delete[] local_ram;
+	if (local_sram)				delete[] local_sram;
+	if (local_fillram)			delete[] local_fillram;
+	if (local_apu_sound)		delete[] local_apu_sound;
+	if (local_control_data)		delete[] local_control_data;
+	if (local_timing_data)		delete[] local_timing_data;
+	if (local_superfx)			delete[] local_superfx;
+	if (local_sa1)				delete[] local_sa1;
+	if (local_sa1_registers)	delete[] local_sa1_registers;
+	if (local_dsp1)				delete[] local_dsp1;
+	if (local_dsp2)				delete[] local_dsp2;
+	if (local_dsp4)				delete[] local_dsp4;
+	if (local_cx4_data)			delete[] local_cx4_data;
+	if (local_st010)			delete[] local_st010;
+	if (local_obc1)				delete[] local_obc1;
+	if (local_obc1_data)		delete[] local_obc1_data;
+	if (local_spc7110)			delete[] local_spc7110;
+	if (local_srtc)				delete[] local_srtc;
+	if (local_rtc_data)			delete[] local_rtc_data;
+	if (local_bsx_data)			delete[] local_bsx_data;
+	if (local_screenshot)		delete[] local_screenshot;
+	if (local_movie_data)		delete[] local_movie_data;
+
+	if (result != SUCCESS) {
+		return (FALSE);
+	}
+
+	S9xMessage(S9X_INFO, S9X_FREEZE_FILE_INFO, String);
+	return (TRUE);
 }
 
 void S9xFreezeToStream (STREAM stream)
@@ -1663,7 +2304,9 @@ int S9xUnfreezeFromStream (STREAM stream)
 		uint32 old_flags     = CPU.Flags;
 		uint32 sa1_old_flags = SA1.Flags;
 
-		S9xReset();
+		//// HERE 
+		//S9xReset();
+		S9xResetSimulation();
 
 		UnfreezeStructFromCopy(&CPU, SnapCPU, COUNT(SnapCPU), local_cpu, version);
 
@@ -1682,11 +2325,11 @@ int S9xUnfreezeFromStream (STREAM stream)
 
 		memcpy(Memory.FillRAM, local_fillram, 0x8000);
 
-        if(version < SNAPSHOT_VERSION_BAPU) {
+        /*if(version < SNAPSHOT_VERSION_BAPU) {
             printf("Using Blargg APU snapshot loading (snapshot version %d, current is %d)\n...", version, SNAPSHOT_VERSION);
             S9xAPULoadBlarggState(local_apu_sound);
         } else
-		    S9xAPULoadState(local_apu_sound);
+		    S9xAPULoadState(local_apu_sound);*/
 
 		struct SControlSnapshot	ctl_snap;
 		UnfreezeStructFromCopy(&ctl_snap, SnapControls, COUNT(SnapControls), local_control_data, version);
@@ -1788,10 +2431,11 @@ int S9xUnfreezeFromStream (STREAM stream)
 		CPU.InDMAorHDMA = CPU.InWRAMDMAorHDMA = FALSE;
 		CPU.HDMARanInDMA = 0;
 
+		/*
 		S9xFixColourBrightness();
 		IPPU.ColorsChanged = TRUE;
 		IPPU.OBJChanged = TRUE;
-		IPPU.RenderThisFrame = TRUE;
+		IPPU.RenderThisFrame = TRUE;*/
 
 		uint8 hdma_byte = Memory.FillRAM[0x420c];
 		S9xSetCPU(hdma_byte, 0x420c);
@@ -1836,7 +2480,7 @@ int S9xUnfreezeFromStream (STREAM stream)
 			pad_read = pad_read_temp;
 		}
 
-		if (local_screenshot)
+		if (false)//local_screenshot)
 		{
 			SnapshotScreenshotInfo	*ssi = new SnapshotScreenshotInfo;
 
@@ -2066,6 +2710,128 @@ static void FreezeStruct (STREAM stream, const char *name, void *base, FreezeDat
 	delete [] block;
 }
 
+static void FreezeStructToString(std::stringstream& stream, const char *name, void *base, FreezeData *fields, int num_fields)
+{
+	int	len = 0;
+	int	i, j;
+
+	for (i = 0; i < num_fields; i++)
+	{
+		if (SNAPSHOT_VERSION < fields[i].debuted_in)
+		{
+			fprintf(stderr, "%s[%p]: field has bad debuted_in value %d, > %d.", name, (void *)fields, fields[i].debuted_in, SNAPSHOT_VERSION);
+			continue;
+		}
+
+		if (SNAPSHOT_VERSION < fields[i].deleted_in)
+			len += FreezeSize(fields[i].size, fields[i].type);
+	}
+
+	uint8	*block = new uint8[len];
+	uint8	*ptr = block;
+	uint8	*addr;
+	uint16	word;
+	uint32	dword;
+	int64	qaword;
+	int		relativeAddr;
+
+	for (i = 0; i < num_fields; i++)
+	{
+		if (SNAPSHOT_VERSION >= fields[i].deleted_in || SNAPSHOT_VERSION < fields[i].debuted_in)
+			continue;
+
+		addr = (uint8 *)base + fields[i].offset;
+
+		// determine real address of indirect-type fields
+		// (where the structure contains a pointer to an array rather than the array itself)
+		if (fields[i].type == uint8_INDIR_ARRAY_V || fields[i].type == uint16_INDIR_ARRAY_V || fields[i].type == uint32_INDIR_ARRAY_V)
+			addr = (uint8 *)(*((pint *)addr));
+
+		// convert pointer-type saves from absolute to relative pointers
+		if (fields[i].type == POINTER_V)
+		{
+			uint8	*pointer = (uint8 *) *((pint *)((uint8 *)base + fields[i].offset));
+			uint8	*relativeTo = (uint8 *) *((pint *)((uint8 *)base + fields[i].offset2));
+			relativeAddr = pointer - relativeTo;
+			addr = (uint8 *)&relativeAddr;
+		}
+
+		switch (fields[i].type)
+		{
+		case INT_V:
+		case POINTER_V:
+			switch (fields[i].size)
+			{
+			case 1:
+				*ptr++ = *(addr);
+				break;
+
+			case 2:
+				word = *((uint16 *)(addr));
+				*ptr++ = (uint8)(word >> 8);
+				*ptr++ = (uint8)word;
+				break;
+
+			case 4:
+				dword = *((uint32 *)(addr));
+				*ptr++ = (uint8)(dword >> 24);
+				*ptr++ = (uint8)(dword >> 16);
+				*ptr++ = (uint8)(dword >> 8);
+				*ptr++ = (uint8)dword;
+				break;
+
+			case 8:
+				qaword = *((int64 *)(addr));
+				*ptr++ = (uint8)(qaword >> 56);
+				*ptr++ = (uint8)(qaword >> 48);
+				*ptr++ = (uint8)(qaword >> 40);
+				*ptr++ = (uint8)(qaword >> 32);
+				*ptr++ = (uint8)(qaword >> 24);
+				*ptr++ = (uint8)(qaword >> 16);
+				*ptr++ = (uint8)(qaword >> 8);
+				*ptr++ = (uint8)qaword;
+				break;
+			}
+
+			break;
+
+		case uint8_ARRAY_V:
+		case uint8_INDIR_ARRAY_V:
+			memmove(ptr, addr, fields[i].size);
+			ptr += fields[i].size;
+
+			break;
+
+		case uint16_ARRAY_V:
+		case uint16_INDIR_ARRAY_V:
+			for (j = 0; j < fields[i].size; j++)
+			{
+				word = *((uint16 *)(addr + j * 2));
+				*ptr++ = (uint8)(word >> 8);
+				*ptr++ = (uint8)word;
+			}
+
+			break;
+
+		case uint32_ARRAY_V:
+		case uint32_INDIR_ARRAY_V:
+			for (j = 0; j < fields[i].size; j++)
+			{
+				dword = *((uint32 *)(addr + j * 4));
+				*ptr++ = (uint8)(dword >> 24);
+				*ptr++ = (uint8)(dword >> 16);
+				*ptr++ = (uint8)(dword >> 8);
+				*ptr++ = (uint8)dword;
+			}
+
+			break;
+		}
+	}
+
+	FreezeBlockToString(stream, name, block, len);
+	delete[] block;
+}
+
 static void FreezeBlock (STREAM stream, const char *name, uint8 *block, int size)
 {
 	char	buffer[20];
@@ -2089,6 +2855,31 @@ static void FreezeBlock (STREAM stream, const char *name, uint8 *block, int size
 	WRITE_STREAM(block, size, stream);
 }
 
+static void FreezeBlockToString(std::stringstream& stream, const char *name, uint8 *block, int size)
+{
+	char	buffer[20];
+
+	// check if it fits in 6 digits. (letting it go over and using strlen isn't safe)
+	if (size <= 999999)
+		sprintf(buffer, "%s:%06d:", name, size);
+	else
+	{
+		// to make it fit, pack it in the bytes instead of as digits
+		sprintf(buffer, "%s:------:", name);
+		buffer[6] = (unsigned char)((unsigned)size >> 24);
+		buffer[7] = (unsigned char)((unsigned)size >> 16);
+		buffer[8] = (unsigned char)((unsigned)size >> 8);
+		buffer[9] = (unsigned char)((unsigned)size >> 0);
+	}
+
+	buffer[11] = 0;
+
+	stream << buffer;
+	std::string blockstr(reinterpret_cast<char*>(block), size); // "";
+
+	stream << blockstr;
+}
+
 static int UnfreezeBlock (STREAM stream, const char *name, uint8 *block, int size)
 {
 	char	buffer[20];
@@ -2097,7 +2888,6 @@ static int UnfreezeBlock (STREAM stream, const char *name, uint8 *block, int siz
 
 	size_t	l = READ_STREAM(buffer, 11, stream);
 	buffer[l] = 0;
-
 	if (l != 11 || strncmp(buffer, name, 3) != 0 || buffer[3] != ':')
 	{
 	err:
@@ -2134,7 +2924,6 @@ static int UnfreezeBlock (STREAM stream, const char *name, uint8 *block, int siz
 		REVERT_STREAM(stream, rewind, 0);
 		return (WRONG_FORMAT);
 	}
-
 	if (rem)
 	{
 		char	*junk = new char[rem];
@@ -2143,6 +2932,76 @@ static int UnfreezeBlock (STREAM stream, const char *name, uint8 *block, int siz
 		if (len != rem)
 		{
 			REVERT_STREAM(stream, rewind, 0);
+			return (WRONG_FORMAT);
+		}
+	}
+
+	return (SUCCESS);
+}
+
+static int UnfreezeBlockFromString(std::stringstream& stream, const char *name, uint8 *block, int size)
+{
+	char	buffer[20];
+	int		len = 0, rem = 0;
+	std::streampos	rewind = stream.tellg();//FIND_STREAM(stream);
+
+	stream.read(buffer, 11);
+	size_t	l = 11;//READ_STREAM(buffer, 11, stream);
+	buffer[l] = 0;
+
+	if (l != 11 || strncmp(buffer, name, 3) != 0 || buffer[3] != ':')
+	{
+	err:
+#ifdef DEBUGGER
+		fprintf(stdout, "absent: %s(%d); next: '%.11s'\n", name, size, buffer);
+#endif
+		//REVERT_STREAM(stream, FIND_STREAM(stream) - l, 0);
+		stream.seekg(stream.tellg() - (std::streampos)l, stream.beg);
+		return (WRONG_FORMAT);
+	}
+
+	if (buffer[4] == '-')
+	{
+		len = (((unsigned char)buffer[6]) << 24)
+			| (((unsigned char)buffer[7]) << 16)
+			| (((unsigned char)buffer[8]) << 8)
+			| (((unsigned char)buffer[9]) << 0);
+	}
+	else
+		len = atoi(buffer + 4);
+
+	if (len <= 0)
+		goto err;
+
+	if (len > size)
+	{
+		rem = len - size;
+		len = size;
+	}
+
+	memset(block, 0, size);
+	char* blockbuffer = new char[len];
+	stream.read(blockbuffer, len);
+	uint8* num = reinterpret_cast<uint8*>(blockbuffer);
+	memcpy(block, num, len);
+	size_t	l2 = len;
+	if (l2 != (unsigned int)len) //if (READ_STREAM(block, len, stream) != (unsigned int) len)
+	{
+		//REVERT_STREAM(stream, rewind, 0);
+		stream.seekg(rewind, stream.beg);
+		return (WRONG_FORMAT);
+	}
+
+	if (rem)
+	{
+		char	*junk = new char[rem];
+		stream.read(junk, rem);
+		len = rem;//READ_STREAM(junk, rem, stream);
+		delete[] junk;
+		if (len != rem)
+		{
+			//REVERT_STREAM(stream, rewind, 0);
+			stream.seekg(rewind, stream.beg);
 			return (WRONG_FORMAT);
 		}
 	}
@@ -2160,6 +3019,23 @@ static int UnfreezeBlockCopy (STREAM stream, const char *name, uint8 **block, in
 	if (result != SUCCESS)
 	{
 		delete [] (*block);
+		*block = NULL;
+		return (result);
+	}
+
+	return (SUCCESS);
+}
+
+static int UnfreezeBlockCopyFromString(std::stringstream& stream, const char *name, uint8 **block, int size)
+{
+	int	result;
+
+	*block = new uint8[size];
+
+	result = UnfreezeBlockFromString(stream, name, *block, size);
+	if (result != SUCCESS)
+	{
+		delete[](*block);
 		*block = NULL;
 		return (result);
 	}
@@ -2186,6 +3062,25 @@ static int UnfreezeStruct (STREAM stream, const char *name, void *base, FreezeDa
 	return (SUCCESS);
 }
 
+static int UnfreezeStructFromString(std::stringstream& stream, const char *name, void *base, FreezeData *fields, int num_fields, int version)
+{
+	int		result;
+	uint8	*block = NULL;
+
+	result = UnfreezeStructCopyFromString(stream, name, &block, fields, num_fields, version);
+	if (result != SUCCESS)
+	{
+		if (block != NULL)
+			delete[] block;
+		return (result);
+	}
+
+	UnfreezeStructFromCopy(base, fields, num_fields, block, version);
+	delete[] block;
+
+	return (SUCCESS);
+}
+
 static int UnfreezeStructCopy (STREAM stream, const char *name, uint8 **block, FreezeData *fields, int num_fields, int version)
 {
 	int	len = 0;
@@ -2197,6 +3092,20 @@ static int UnfreezeStructCopy (STREAM stream, const char *name, uint8 **block, F
 	}
 
 	return (UnfreezeBlockCopy(stream, name, block, len));
+}
+
+
+static int UnfreezeStructCopyFromString(std::stringstream& stream, const char *name, uint8 **block, FreezeData *fields, int num_fields, int version)
+{
+	int	len = 0;
+
+	for (int i = 0; i < num_fields; i++)
+	{
+		if (version >= fields[i].debuted_in && version < fields[i].deleted_in)
+			len += FreezeSize(fields[i].size, fields[i].type);
+	}
+
+	return (UnfreezeBlockCopyFromString(stream, name, block, len));
 }
 
 static void UnfreezeStructFromCopy (void *sbase, FreezeData *fields, int num_fields, uint8 *block, int version)

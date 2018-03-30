@@ -408,7 +408,7 @@ void S9xDoHEventProcessing (void)
 				SuperFX.oneLineDone = FALSE;
 			}
 
-			S9xAPUEndScanline();
+			//S9xAPUEndScanline();
 			CPU.Cycles -= Timings.H_Max;
 			CPU.PrevCycles -= Timings.H_Max;
 			S9xAPUSetReferenceTime(CPU.Cycles);

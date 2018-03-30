@@ -223,6 +223,7 @@
 #define MAX_RECENT_HOSTS_LIST_SIZE 16
 
 #include "_tfwopen.h"
+#include "./port.h"
 #ifdef UNICODE
 #define _tToChar WideToUtf8
 #define _tFromChar Utf8ToWide
@@ -575,6 +576,16 @@ enum
 /*****************************************************************************/
 
 void SetInfoDlgColor(unsigned char r, unsigned char g, unsigned char b);
+
+//
+// MODIFIED
+//
+void FreezeUnfreezeSlot(int slot, bool8 freeze);
+static void ResetFrameTimer();
+//static bool LoadROM(const TCHAR *filename, const TCHAR *filename2 = NULL);
+//
+//
+//
 
 extern struct sGUI GUI;
 extern struct sLanguages Languages[];

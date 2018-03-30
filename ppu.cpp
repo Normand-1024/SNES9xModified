@@ -189,7 +189,8 @@
   Nintendo Co., Limited and its subsidiary companies.
  ***********************************************************************************/
 
-
+#include <fstream>
+#include <iostream>
 #include "snes9x.h"
 #include "memmap.h"
 #include "dma.h"
@@ -209,6 +210,10 @@
 #endif
 
 extern uint8	*HDMAMemPointers[8];
+
+//~~~~~~~~~~~~~~~~~~~
+uint16 posA[128];
+//~~~~~~~~~~~~~~~~~~~
 
 
 static inline void S9xLatchCounters (bool force)
@@ -1095,6 +1100,24 @@ void S9xSetPPU (uint8 Byte, uint16 Address)
 	}
 
 	Memory.FillRAM[Address] = Byte;
+
+	
+	/*
+	//==================PRINTING OUT POSITIONS OF THE SPRITES THAT CHANGED=============
+
+	std::ofstream myfile;
+	myfile.open("o.txt", std::ios::app);
+	
+
+	for (int i = 0; i < 128; i ++) {
+		if (posA[i] != PPU.OBJ[i].VPos)
+			myfile << i << ": " << PPU.OBJ[i].Name << " ~ H: " << PPU.OBJ[i].HPos << " ~ V: " << PPU.OBJ[i].VPos << "\n";
+
+		posA[i] = PPU.OBJ[i].VPos;
+	}
+
+	myfile.close();
+	*/
 }
 
 uint8 S9xGetPPU (uint16 Address)

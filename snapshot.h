@@ -194,6 +194,7 @@
 #define _SNAPSHOT_H_
 
 #include "snes9x.h"
+#include <sstream>
 
 #define SNAPSHOT_MAGIC			"#!s9xsnp"
 #define SNAPSHOT_VERSION_IRQ    7
@@ -216,5 +217,7 @@ bool8 S9xUnfreezeGame (const char *);
 int S9xUnfreezeGameMem (const uint8 *,uint32);
 void S9xFreezeToStream (STREAM);
 int	 S9xUnfreezeFromStream (STREAM);
+bool8 UnfreezeState(std::stringstream&);
+std::stringstream FreezeState();
 
 #endif

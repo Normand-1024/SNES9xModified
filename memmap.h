@@ -290,7 +290,9 @@ struct CMemory
     uint32  MemLoader (uint8 *, const char*, uint32);
     bool8   LoadROMMem (const uint8 *, uint32);
 	bool8	LoadROM (const char *);
-    bool8	LoadROMInt (int32);
+	bool8	LoadROMSimulation(const char *);
+	bool8	LoadROMInt(int32);
+	bool8	LoadROMIntSimulation(int32);
     bool8   LoadMultiCartMem (const uint8 *, uint32, const uint8 *, uint32, const uint8 *, uint32);
 	bool8	LoadMultiCart (const char *, const char *);
     bool8	LoadMultiCartInt ();

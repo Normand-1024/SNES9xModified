@@ -266,6 +266,11 @@ inline uint8 S9xGetByte (uint32 Address)
 			return (byte);
 
 		case CMemory::MAP_PPU:
+			//MODIFIED
+			byte = OpenBus;
+			addCyclesInMemoryAccess;
+			return (byte);
+			//
 			if (CPU.InDMAorHDMA && (Address & 0xff00) == 0x2100)
 				return (OpenBus);
 
@@ -396,6 +401,7 @@ inline uint16 S9xGetWord (uint32 Address, enum s9xwrap_t w = WRAP_NONE)
 			return (word);
 
 		case CMemory::MAP_PPU:
+			return (unsigned short)0;
 			if (CPU.InDMAorHDMA)
 			{
 				OpenBus = S9xGetByte(Address);
@@ -527,6 +533,7 @@ inline void S9xSetByte (uint8 Byte, uint32 Address)
 			return;
 
 		case CMemory::MAP_PPU:
+			return;
 			if (CPU.InDMAorHDMA && (Address & 0xff00) == 0x2100)
 				return;
 
@@ -680,6 +687,7 @@ inline void S9xSetWord (uint16 Word, uint32 Address, enum s9xwrap_t w = WRAP_NON
 			}
 
 		case CMemory::MAP_PPU:
+			return;
 			if (CPU.InDMAorHDMA)
 			{
 				if ((Address & 0xff00) != 0x2100)

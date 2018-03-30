@@ -1580,6 +1580,30 @@ bool8 CMemory::LoadROM (const char *filename)
     return TRUE;
 }
 
+bool8 CMemory::LoadROMSimulation(const char *filename)
+{
+	if (!filename || !*filename)
+		return FALSE;
+
+	int32 totalFileSize;
+
+	do
+	{
+		memset(ROM, 0, MAX_ROM_SIZE);
+		memset(&Multi, 0, sizeof(Multi));
+		totalFileSize = FileLoader(ROM, filename, MAX_ROM_SIZE);
+
+		if (!totalFileSize)
+			return (FALSE);
+
+		if (!Settings.NoPatch)
+			CheckForAnyPatch(filename, HeaderCount != 0, totalFileSize);
+	} while (!LoadROMIntSimulation(totalFileSize));
+
+	return TRUE;
+}
+
+
 bool8 CMemory::LoadROMInt (int32 ROMfillSize)
 {
 	Settings.DisplayColor = BUILD_PIXEL(31, 31, 31);
@@ -1792,6 +1816,220 @@ bool8 CMemory::LoadROMInt (int32 ROMfillSize)
 	S9xReset();
 
     return (TRUE);
+}
+
+bool8 CMemory::LoadROMIntSimulation(int32 ROMfillSize)
+{
+	//Settings.DisplayColor = BUILD_PIXEL(31, 31, 31);
+	//SET_UI_COLOR(255, 255, 255);
+
+	CalculatedSize = 0;
+	ExtendedFormat = NOPE;
+
+	int	hi_score, lo_score;
+
+	hi_score = ScoreHiROM(FALSE);
+	lo_score = ScoreLoROM(FALSE);
+
+	if (HeaderCount == 0 && !Settings.ForceNoHeader &&
+		((hi_score >  lo_score && ScoreHiROM(TRUE) > hi_score) ||
+		(hi_score <= lo_score && ScoreLoROM(TRUE) > lo_score)))
+	{
+		memmove(ROM, ROM + 512, ROMfillSize - 512);
+		ROMfillSize -= 512;
+		S9xMessage(S9X_INFO, S9X_HEADER_WARNING, "Try 'force no-header' option if the game doesn't work");
+		// modifying ROM, so we need to rescore
+		hi_score = ScoreHiROM(FALSE);
+		lo_score = ScoreLoROM(FALSE);
+	}
+
+	CalculatedSize = (ROMfillSize / 0x2000) * 0x2000;
+
+	if (CalculatedSize > 0x400000 &&
+		(ROM[0x7fd5] + (ROM[0x7fd6] << 8)) != 0x3423 && // exclude SA-1
+		(ROM[0x7fd5] + (ROM[0x7fd6] << 8)) != 0x3523 &&
+		(ROM[0x7fd5] + (ROM[0x7fd6] << 8)) != 0x4332 && // exclude S-DD1
+		(ROM[0x7fd5] + (ROM[0x7fd6] << 8)) != 0x4532 &&
+		(ROM[0xffd5] + (ROM[0xffd6] << 8)) != 0xF93a && // exclude SPC7110
+		(ROM[0xffd5] + (ROM[0xffd6] << 8)) != 0xF53a)
+		ExtendedFormat = YEAH;
+
+	// if both vectors are invalid, it's type 1 interleaved LoROM
+	if (ExtendedFormat == NOPE &&
+		((ROM[0x7ffc] + (ROM[0x7ffd] << 8)) < 0x8000) &&
+		((ROM[0xfffc] + (ROM[0xfffd] << 8)) < 0x8000))
+	{
+		if (!Settings.ForceInterleaved && !Settings.ForceNotInterleaved)
+			S9xDeinterleaveType1(ROMfillSize, ROM);
+	}
+
+	// CalculatedSize is now set, so rescore
+	hi_score = ScoreHiROM(FALSE);
+	lo_score = ScoreLoROM(FALSE);
+
+	uint8	*RomHeader = ROM;
+
+	if (ExtendedFormat != NOPE)
+	{
+		int	swappedhirom, swappedlorom;
+
+		swappedhirom = ScoreHiROM(FALSE, 0x400000);
+		swappedlorom = ScoreLoROM(FALSE, 0x400000);
+
+		// set swapped here
+		if (max(swappedlorom, swappedhirom) >= max(lo_score, hi_score))
+		{
+			ExtendedFormat = BIGFIRST;
+			hi_score = swappedhirom;
+			lo_score = swappedlorom;
+			RomHeader += 0x400000;
+		}
+		else
+			ExtendedFormat = SMALLFIRST;
+	}
+
+	bool8	interleaved, tales = FALSE;
+
+	interleaved = Settings.ForceInterleaved || Settings.ForceInterleaved2 || Settings.ForceInterleaveGD24;
+
+	if (Settings.ForceLoROM || (!Settings.ForceHiROM && lo_score >= hi_score))
+	{
+		LoROM = TRUE;
+		HiROM = FALSE;
+
+		// ignore map type byte if not 0x2x or 0x3x
+		if ((RomHeader[0x7fd5] & 0xf0) == 0x20 || (RomHeader[0x7fd5] & 0xf0) == 0x30)
+		{
+			switch (RomHeader[0x7fd5] & 0xf)
+			{
+			case 1:
+				interleaved = TRUE;
+				break;
+
+			case 5:
+				interleaved = TRUE;
+				tales = TRUE;
+				break;
+			}
+		}
+	}
+	else
+	{
+		LoROM = FALSE;
+		HiROM = TRUE;
+
+		if ((RomHeader[0xffd5] & 0xf0) == 0x20 || (RomHeader[0xffd5] & 0xf0) == 0x30)
+		{
+			switch (RomHeader[0xffd5] & 0xf)
+			{
+			case 0:
+			case 3:
+				interleaved = TRUE;
+				break;
+			}
+		}
+	}
+
+	// this two games fail to be detected
+	if (!Settings.ForceHiROM && !Settings.ForceLoROM)
+	{
+		if (strncmp((char *)&ROM[0x7fc0], "YUYU NO QUIZ DE GO!GO!", 22) == 0 ||
+			(strncmp((char *)&ROM[0xffc0], "BATMAN--REVENGE JOKER", 21) == 0))
+		{
+			LoROM = TRUE;
+			HiROM = FALSE;
+			interleaved = FALSE;
+			tales = FALSE;
+		}
+	}
+
+	if (!Settings.ForceNotInterleaved && interleaved)
+	{
+		S9xMessage(S9X_INFO, S9X_ROM_INTERLEAVED_INFO, "ROM image is in interleaved format - converting...");
+
+		if (tales)
+		{
+			if (ExtendedFormat == BIGFIRST)
+			{
+				S9xDeinterleaveType1(0x400000, ROM);
+				S9xDeinterleaveType1(CalculatedSize - 0x400000, ROM + 0x400000);
+			}
+			else
+			{
+				S9xDeinterleaveType1(CalculatedSize - 0x400000, ROM);
+				S9xDeinterleaveType1(0x400000, ROM + CalculatedSize - 0x400000);
+			}
+
+			LoROM = FALSE;
+			HiROM = TRUE;
+		}
+		else
+			if (Settings.ForceInterleaveGD24 && CalculatedSize == 0x300000)
+			{
+				bool8	t = LoROM;
+				LoROM = HiROM;
+				HiROM = t;
+				S9xDeinterleaveGD24(CalculatedSize, ROM);
+			}
+			else
+				if (Settings.ForceInterleaved2)
+					S9xDeinterleaveType2(CalculatedSize, ROM);
+				else
+				{
+					bool8	t = LoROM;
+					LoROM = HiROM;
+					HiROM = t;
+					S9xDeinterleaveType1(CalculatedSize, ROM);
+				}
+
+		hi_score = ScoreHiROM(FALSE);
+		lo_score = ScoreLoROM(FALSE);
+
+		if ((HiROM && (lo_score >= hi_score || hi_score < 0)) ||
+			(LoROM && (hi_score >  lo_score || lo_score < 0)))
+		{
+			S9xMessage(S9X_INFO, S9X_ROM_CONFUSING_FORMAT_INFO, "ROM lied about its type! Trying again.");
+			Settings.ForceNotInterleaved = TRUE;
+			Settings.ForceInterleaved = FALSE;
+			return (FALSE);
+		}
+	}
+
+	if (ExtendedFormat == SMALLFIRST)
+		tales = TRUE;
+
+	if (tales)
+	{
+		uint8	*tmp = (uint8 *)malloc(CalculatedSize - 0x400000);
+		if (tmp)
+		{
+			S9xMessage(S9X_INFO, S9X_ROM_INTERLEAVED_INFO, "Fixing swapped ExHiROM...");
+			memmove(tmp, ROM, CalculatedSize - 0x400000);
+			memmove(ROM, ROM + CalculatedSize - 0x400000, 0x400000);
+			memmove(ROM + 0x400000, tmp, CalculatedSize - 0x400000);
+			free(tmp);
+		}
+	}
+
+	if (strncmp(LastRomFilename, ROMFilename, PATH_MAX + 1))
+	{
+		strncpy(LastRomFilename, ROMFilename, PATH_MAX + 1);
+		LastRomFilename[PATH_MAX] = 0;
+	}
+
+	memset(&SNESGameFixes, 0, sizeof(SNESGameFixes));
+	SNESGameFixes.SRAMInitialValue = 0x60;
+
+	S9xLoadCheatFile(S9xGetFilename(".cht", CHEAT_DIR));
+
+	InitROM();
+
+	S9xInitCheatData();
+	S9xApplyCheats();
+
+	S9xResetSimulation();
+
+	return (TRUE);
 }
 
 bool8 CMemory::LoadMultiCartMem (const uint8 *sourceA, uint32 sourceASize,
@@ -2169,6 +2407,7 @@ bool8 CMemory::LoadSRAM (const char *filename)
 
 bool8 CMemory::SaveSRAM (const char *filename)
 {
+
 	if (Settings.SuperFX && ROMType < 0x15) // doesn't have SRAM
 		return (TRUE);
 
@@ -3761,7 +4000,7 @@ void CMemory::ApplyROMFixes (void)
 	}
 
 	//// APU timing hacks :(
-
+	return;
 	Timings.APUSpeedup = 0;
 
 	if (!Settings.DisableGameSpecificHacks)

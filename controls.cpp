@@ -1799,6 +1799,74 @@ bool S9xMapButton (uint32 id, s9xcommand_t mapping, bool poll)
 	return (true);
 }
 
+bool bPressed = true;
+int counter = 0;
+uint16 currentButtons = 0;
+#define BUTTONPRESS_COUNT 600
+
+uint16 RandomButton() {
+	uint16 output = 0;
+	//srand(time(NULL));
+	float t = (float)rand() / RAND_MAX, l = (float)rand() / RAND_MAX, r = (float)rand() / RAND_MAX;
+
+	float TLTR = 0.02,
+		TL = 0.04,
+		TR = 0.04,
+		A = 0.2,
+		B = 0.2,
+		X = 0.2,
+		Y = 0.2,
+		UP = 0.2,
+		DOWN = 0.2,
+		LEFT = 0.0,
+		RIGHT = 0.2;
+
+	if (t < TLTR)
+		output |= SNES_TL_MASK | SNES_TR_MASK;
+	else if (t < TLTR + TL)
+		output |= SNES_TL_MASK;
+	else if (t < TLTR + TL + TR)
+		output |= SNES_TR_MASK;
+
+	if (l < A)
+		output |= SNES_A_MASK;
+	else if (l < A+B)
+		output |= SNES_B_MASK;
+	else if (l < A+B+X)
+		output |= SNES_X_MASK;
+	else if (l < A+B+X+Y)
+		output |= SNES_Y_MASK;
+
+	if (r < UP)
+		output |= SNES_UP_MASK;
+	else if (r < UP+DOWN)
+		output |= SNES_DOWN_MASK;
+	else if (r < UP+DOWN+LEFT)
+		output |= SNES_LEFT_MASK;
+	else if (r < UP+DOWN+LEFT+RIGHT)
+		output |= SNES_RIGHT_MASK;
+
+	return output;
+}
+
+void GenerateControl(uint16& buttons, bool& pressed) {
+	// If COUNT = 8, then the function will return the same button press 
+	// with pressed off for 8 counts, and pressed on for 8 counts, 16 counts for the same button combination in total
+	
+	//****counter++;
+
+	if (counter >= BUTTONPRESS_COUNT) {
+		counter = 0;
+		bPressed = !bPressed;
+		if (bPressed)
+			currentButtons = 0;//RandomButton();
+	}
+
+	//buttons = currentButtons;
+	buttons = SNES_RIGHT_MASK;
+	pressed = bPressed;
+}
+
 void S9xReportButton (uint32 id, bool pressed)
 {
 	if (keymap.count(id) == 0)
@@ -1813,12 +1881,16 @@ void S9xReportButton (uint32 id, bool pressed)
 		return;
 	}
 
+	//Randomly generate control press
+	GenerateControl(keymap[id].button.joypad.buttons, pressed);
+	//fprintf(stdout, "%d\n", (Memory.RAM[0x95] << 8) + Memory.RAM[0x94]);
+
 	if (keymap[id].type == S9xButtonCommand)	// skips the "already-pressed check" unless it's a command, as a hack to work around the following problem:
 		if (keymap[id].button_norpt == pressed)	// FIXME: this makes the controls "stick" after loading a savestate while recording a movie and holding any button
 			return;
 
 	keymap[id].button_norpt = pressed;
-
+	
 	S9xApplyCommand(keymap[id], pressed, 0);
 }
 

@@ -236,6 +236,7 @@ repeats the last rendered frame
 */
 void WinRefreshDisplay(void)
 {
+	//return;
 	if(!Src.Width)
 		return;
 

@@ -255,6 +255,9 @@ extern SNPServer NPServer;
 
 #include <ctype.h>
 
+#include "./win32/SMWGameState.h"
+SMWGameState SMWState;
+
 #ifdef _MSC_VER
 #define F_OK 0
 #define X_OK 1
@@ -643,6 +646,7 @@ void CheckDirectoryIsWritable (const char *filename);
 static void CheckMenuStates ();
 static void ResetFrameTimer ();
 static bool LoadROM (const TCHAR *filename, const TCHAR *filename2 = NULL);
+static bool LoadROMSimulation(const TCHAR *filename, const TCHAR *filename2 = NULL);
 static bool LoadROMMulti (const TCHAR *filename, const TCHAR *filename2);
 bool8 S9xLoadROMImage (const TCHAR *string);
 #ifdef NETPLAY_SUPPORT
@@ -2236,8 +2240,8 @@ LRESULT CALLBACK WinProc(
 			Settings.FrameAdvance = false;
 			GUI.FrameAdvanceJustPressed = 0;
 			break;
-        case ID_FILE_LOAD0:
-			FreezeUnfreezeSlot (0, FALSE);
+		case ID_FILE_LOAD0: 
+			FreezeUnfreezeSlot(0, FALSE);
 			break;
 		case ID_FILE_LOAD1:
 			FreezeUnfreezeSlot (1, FALSE);
@@ -3343,12 +3347,43 @@ static void ProcessInput(void)
 /*****************************************************************************/
 void DeinitS9x(void);
 
+
+
 int WINAPI WinMain(
-				   HINSTANCE hInstance,
-				   HINSTANCE hPrevInstance,
-				   LPSTR lpCmdLine,
-				   int nCmdShow)
+	HINSTANCE hInstance,
+	HINSTANCE hPrevInstance,
+	LPSTR lpCmdLine,
+	int nCmdShow)
 {
+	Memory.Init();
+
+	extern void S9xPostRomInit();
+	Memory.PostRomInitFunc = S9xPostRomInit;
+
+	// Redirect stderr and stdout to file. It wouldn't go to any commandline anyway.
+	FILE* fout = freopen("stdout.txt", "w", stdout);
+	if (fout) setvbuf(fout, NULL, _IONBF, 0);
+	FILE* ferr = freopen("stderr.txt", "w", stderr);
+	if (ferr) setvbuf(ferr, NULL, _IONBF, 0);
+
+	//S9xInitAPU();
+
+	//ReInitSound();
+
+	fprintf(stdout, "%d\n", LoadROMSimulation(_tFromChar("Super Mario World (U) [!].smc")));
+
+	S9xUnmapAllControls();
+	S9xSetupDefaultKeymap();
+
+	while (true)
+	{
+		ProcessInput();
+		S9xMainLoop();
+		SMWState.updateState();
+		SMWState.printState();
+		GUI.FrameCount++;
+	}
+	/*
 	Settings.StopEmulation = TRUE;
 
 	SetCurrentDirectory(S9xGetDirectoryT(DEFAULT_DIR));
@@ -3370,7 +3405,8 @@ int WINAPI WinMain(
 
     ChangeInputDevice();
 
-    const TCHAR *rom_filename = WinParseCommandLineAndLoadConfigFile (GetCommandLine());
+	const TCHAR *rom_filename = WinParseCommandLineAndLoadConfigFile (_tFromChar("garbage \"Super Mario World (U) [!].smc\""));
+	//rom_filename = _tFromChar("snes9x-debug.exe SMW.smc");
     WinSaveConfigFile ();
 	WinLockConfigFile ();
 
@@ -3600,6 +3636,8 @@ int WINAPI WinMain(
                 }
 
 				S9xMainLoop();
+				SMWState.updateState();
+				SMWState.printState();
 				GUI.FrameCount++;
 			}
 
@@ -3671,6 +3709,7 @@ loop_exit:
 	DeinitS9x();
 
 	return msg.wParam;
+	*/
 }
 
 void FreezeUnfreezeDialog(bool8 freeze)
@@ -3740,7 +3779,6 @@ void FreezeUnfreeze (const char *filename, bool8 freeze)
 	}
     else
     {
-
         if (S9xUnfreezeGame (filename))
         {
 //	        S9xMessage (S9X_INFO, S9X_FREEZE_FILE_INFO, S9xBasename (filename));
@@ -4053,6 +4091,7 @@ static void ResetFrameTimer ()
 
 static bool LoadROMPlain(const TCHAR *filename)
 {
+	//fprintf(stdout, "\n---%s---\n", filename);
 	if (!filename || !*filename)
 		return (FALSE);
 	SetCurrentDirectory(S9xGetDirectoryT(ROM_DIR));
@@ -4064,6 +4103,21 @@ static bool LoadROMPlain(const TCHAR *filename)
         return (TRUE);
     }
     return (FALSE);
+}
+
+static bool LoadROMPlainSimulation(const TCHAR *filename)
+{
+	if (!filename || !*filename)
+		return (FALSE);
+	SetCurrentDirectory(S9xGetDirectoryT(ROM_DIR));
+	if (Memory.LoadROMSimulation(_tToChar(filename)))
+	{
+		//S9xStartCheatSearch(&Cheat);
+		//ReInitSound();
+		ResetFrameTimer();
+		return (TRUE);
+	}
+	return (FALSE);
 }
 
 static bool LoadROMMulti(const TCHAR *filename, const TCHAR *filename2)
@@ -4089,6 +4143,8 @@ static bool LoadROM(const TCHAR *filename, const TCHAR *filename2 /*= NULL*/) {
 		return false;
 	}
 #endif
+
+	//std::wcout << endl << filename << endl;
 
 	if (!Settings.StopEmulation) {
 		Memory.SaveSRAM (S9xGetFilename (".srm", SRAM_DIR));
@@ -4129,6 +4185,45 @@ static bool LoadROM(const TCHAR *filename, const TCHAR *filename2 /*= NULL*/) {
 		SetCursor (GUI.Arrow);
 		GUI.CursorTimer = 60;
 	}
+	Settings.Paused = false;
+
+	return !Settings.StopEmulation;
+}
+
+static bool LoadROMSimulation(const TCHAR *filename, const TCHAR *filename2) {
+	if (!Settings.StopEmulation) {
+		Memory.SaveSRAM(S9xGetFilename(".srm", SRAM_DIR));
+		S9xSaveCheatFile(S9xGetFilename(".cht", CHEAT_DIR));
+	}
+
+	if (filename2)
+		Settings.StopEmulation = !LoadROMMulti(filename, filename2);
+	else
+		Settings.StopEmulation = !LoadROMPlainSimulation(filename);
+
+	if (!Settings.StopEmulation) {
+		bool8 loadedSRAM = Memory.LoadSRAM(S9xGetFilename(".srm", SRAM_DIR));
+		if (!loadedSRAM) // help migration from earlier Snes9x versions by checking ROM directory for savestates
+			Memory.LoadSRAM(S9xGetFilename(".srm", ROMFILENAME_DIR));
+		//if (!filename2) // no recent for multi cart
+		//	S9xAddToRecentGames(filename);
+		CheckDirectoryIsWritable(S9xGetFilename(".---", SNAPSHOT_DIR));
+
+		/*if (GUI.rewindBufferSize)
+		{
+#if !_WIN64
+			if (GUI.rewindBufferSize > 1024) GUI.rewindBufferSize = 1024;
+#endif
+			stateMan.init(GUI.rewindBufferSize * 1024 * 1024);
+		}*/
+	}
+
+	/*if (GUI.ControllerOption == SNES_SUPERSCOPE)
+		SetCursor(GUI.GunSight);
+	else {
+		SetCursor(GUI.Arrow);
+		GUI.CursorTimer = 60;
+	}*/
 	Settings.Paused = false;
 
 	return !Settings.StopEmulation;

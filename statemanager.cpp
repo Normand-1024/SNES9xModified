@@ -75,7 +75,6 @@ bool StateManager::init(size_t buffer_size) {
         return false;
 
     top_ptr = 1;
-
     
     buf_size = nearest_pow2_size(buffer_size) / sizeof(uint64_t); // Works in multiple of 8.
     buf_size_mask = buf_size - 1;
