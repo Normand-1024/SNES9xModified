@@ -3355,7 +3355,7 @@ int WINAPI WinMain(
 	LPSTR lpCmdLine,
 	int nCmdShow)
 {
-	Memory.Init();
+	/*Memory.Init();
 
 	extern void S9xPostRomInit();
 	Memory.PostRomInitFunc = S9xPostRomInit;
@@ -3382,8 +3382,7 @@ int WINAPI WinMain(
 		SMWState.updateState();
 		SMWState.printState();
 		GUI.FrameCount++;
-	}
-	/*
+	} */
 	Settings.StopEmulation = TRUE;
 
 	SetCurrentDirectory(S9xGetDirectoryT(DEFAULT_DIR));
@@ -3511,6 +3510,7 @@ int WINAPI WinMain(
 			Settings.ForcedPause ||
 			PeekMessage (&msg, NULL, 0, 0, PM_NOREMOVE))
         {
+
             if (!GetMessage (&msg, NULL, 0, 0))
                 goto loop_exit; // got WM_QUIT
 
@@ -3709,7 +3709,6 @@ loop_exit:
 	DeinitS9x();
 
 	return msg.wParam;
-	*/
 }
 
 void FreezeUnfreezeDialog(bool8 freeze)

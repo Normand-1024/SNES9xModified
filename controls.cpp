@@ -1882,7 +1882,7 @@ void S9xReportButton (uint32 id, bool pressed)
 	}
 
 	//Randomly generate control press
-	GenerateControl(keymap[id].button.joypad.buttons, pressed);
+	//GenerateControl(keymap[id].button.joypad.buttons, pressed);
 	//fprintf(stdout, "%d\n", (Memory.RAM[0x95] << 8) + Memory.RAM[0x94]);
 
 	if (keymap[id].type == S9xButtonCommand)	// skips the "already-pressed check" unless it's a command, as a hack to work around the following problem:

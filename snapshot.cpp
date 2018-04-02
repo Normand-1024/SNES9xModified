@@ -2304,10 +2304,8 @@ int S9xUnfreezeFromStream (STREAM stream)
 		uint32 old_flags     = CPU.Flags;
 		uint32 sa1_old_flags = SA1.Flags;
 
-		//// HERE 
-		//S9xReset();
-		S9xResetSimulation();
-
+		S9xReset();
+		
 		UnfreezeStructFromCopy(&CPU, SnapCPU, COUNT(SnapCPU), local_cpu, version);
 
 		UnfreezeStructFromCopy(&Registers, SnapRegisters, COUNT(SnapRegisters), local_registers, version);
@@ -2325,11 +2323,11 @@ int S9xUnfreezeFromStream (STREAM stream)
 
 		memcpy(Memory.FillRAM, local_fillram, 0x8000);
 
-        /*if(version < SNAPSHOT_VERSION_BAPU) {
+        if(version < SNAPSHOT_VERSION_BAPU) {
             printf("Using Blargg APU snapshot loading (snapshot version %d, current is %d)\n...", version, SNAPSHOT_VERSION);
             S9xAPULoadBlarggState(local_apu_sound);
         } else
-		    S9xAPULoadState(local_apu_sound);*/
+		    S9xAPULoadState(local_apu_sound);
 
 		struct SControlSnapshot	ctl_snap;
 		UnfreezeStructFromCopy(&ctl_snap, SnapControls, COUNT(SnapControls), local_control_data, version);
@@ -2431,11 +2429,10 @@ int S9xUnfreezeFromStream (STREAM stream)
 		CPU.InDMAorHDMA = CPU.InWRAMDMAorHDMA = FALSE;
 		CPU.HDMARanInDMA = 0;
 
-		/*
 		S9xFixColourBrightness();
 		IPPU.ColorsChanged = TRUE;
 		IPPU.OBJChanged = TRUE;
-		IPPU.RenderThisFrame = TRUE;*/
+		IPPU.RenderThisFrame = TRUE;
 
 		uint8 hdma_byte = Memory.FillRAM[0x420c];
 		S9xSetCPU(hdma_byte, 0x420c);
@@ -2480,7 +2477,7 @@ int S9xUnfreezeFromStream (STREAM stream)
 			pad_read = pad_read_temp;
 		}
 
-		if (false)//local_screenshot)
+		if (local_screenshot)
 		{
 			SnapshotScreenshotInfo	*ssi = new SnapshotScreenshotInfo;
 

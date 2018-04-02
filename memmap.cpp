@@ -4000,7 +4000,6 @@ void CMemory::ApplyROMFixes (void)
 	}
 
 	//// APU timing hacks :(
-	return;
 	Timings.APUSpeedup = 0;
 
 	if (!Settings.DisableGameSpecificHacks)
