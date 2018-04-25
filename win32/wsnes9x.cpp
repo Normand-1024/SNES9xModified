@@ -230,7 +230,11 @@
 #include "../statemanager.h"
 #include "AVIOutput.h"
 #include "InputCustom.h"
+
+#include <algorithm>
 #include <vector>
+#include <queue>
+#include <chrono>
 
 #if (((defined(_MSC_VER) && _MSC_VER >= 1300)) || defined(__MINGW32__))
 	// both MINGW and VS.NET use fstream instead of fstream.h which is deprecated
@@ -3340,14 +3344,89 @@ static void ProcessInput(void)
 //static void WinDisplayString (const char *string, int linesFromBottom, int pixelsFromLeft, bool allowWrap);
 
 
+/*****************************************************************************/
+/* Game State Update Function                                                */
+/*****************************************************************************/
+void step(GameState* state) {
+	ProcessInput();
+	S9xMainLoop();
+	state->updateState();
+	GUI.FrameCount++;
+}
+
+/*****************************************************************************/
+/*                              A STAR                                       */
+/*****************************************************************************/
+template <class S>
+uint16 A_Star(S* state) {
+	uint16 control_set[] = { SNES_RIGHT_MASK, SNES_Y_MASK, 0 };
+							/*{ SNES_LEFT_MASK, SNES_RIGHT_MASK, SNES_Y_MASK, SNES_B_MASK,
+							SNES_LEFT_MASK | SNES_Y_MASK, SNES_LEFT_MASK | SNES_B_MASK,
+							SNES_RIGHT_MASK | SNES_Y_MASK, SNES_RIGHT_MASK | SNES_B_MASK,
+							SNES_LEFT_MASK | SNES_Y_MASK | SNES_B_MASK, SNES_RIGHT_MASK | SNES_Y_MASK | SNES_B_MASK,
+							SNES_Y_MASK | SNES_B_MASK, 0 };*/
+
+	priority_queue<S*, vector<S*>, StateOpt_Less> openSet;
+	vector<S*> closedSet, currentSet;
+	map<S*, uint16> control;
+	map<S*, int> fScore;
+
+	openSet.push(state);
+	auto start = chrono::high_resolution_clock::now();
+	auto now = start;
+	auto ms = chrono::duration_cast<chrono::milliseconds>(now - start).count();
+
+	while (!openSet.empty()) {
+		GameState* current = openSet.top();
+		
+		//Check for time, if over a set time, then return best
+		now = chrono::high_resolution_clock::now();
+		ms = chrono::duration_cast<chrono::milliseconds>(now - start).count();
+		if (ms >= 1000)
+			return control[current];
+
+		openSet.pop();
+		closedSet.push_back(current);
+
+		// Initialize the neighbors
+		for (uint16 control : control_set) {
+			//Copy current state
+			current->loadState();
+			S simulated_state(*current);
+			S* state_p = &simulated_state;
+
+			//push into current set
+			currentSet.push_back(state_p);
+
+			//TODO: apply control, rewrite report button function ( processInput -> ControlPadFlagsToS9xReportButtons -> Button)
+			step(state_p);
+			control.insert(std::pair<S*, uint16>(state_p, control));
+			fScore.insert(std::pair<S*, int>(state_p, state_p->getScore()));
+		}
+
+		for (S* s : currentSet) {
+			if (find(closedSet.begin(), closedSet.end(), s) != closedSet.end())
+				continue;
+
+			//TODO: SHOULD WE CHECK IF CURRENT STATE IS IN THE QUEUE?
+			openSet.push(s);
+
+			control[s] = control[current];
+		}
+
+		//Clear currentSet
+		for (S* s_delete : currentSet) {
+			delete s_delete
+		}
+		currentSet.clear();
+	}
+}
 
 
 /*****************************************************************************/
 /* WinMain                                                                   */
 /*****************************************************************************/
 void DeinitS9x(void);
-
-
 
 int WINAPI WinMain(
 	HINSTANCE hInstance,
@@ -3377,11 +3456,18 @@ int WINAPI WinMain(
 
 	while (true)
 	{
+		//string dummy;
+		//std::cin >> dummy;
+		step(&SMWState);
+		SMWState.printState();
+		
+		/*
 		ProcessInput();
 		S9xMainLoop();
 		SMWState.updateState();
 		SMWState.printState();
 		GUI.FrameCount++;
+		*/
 	}
 	/*
 	Settings.StopEmulation = TRUE;

@@ -22,6 +22,12 @@ public:
 		//if (!stateMan.init(1024 * 1024 * 1024)) // 1 MB of buffer size
 		//	fprintf(stdout, "\n INSUFFICIENT MEM SIZE IN STATEMAN \n");
 	}
+	GameState(const GameState& obj) {
+		ss << obj.ss.rdbuf();
+	}
+	~GameState() {
+		ss.str("");
+	}
 
 	void loadState() {
 		std::stringstream temp;
@@ -35,11 +41,31 @@ public:
 		ss = FreezeState();
 	}
 
+	virtual int getScore() const = 0;
+
+
 	virtual void updateState() = 0;
 
 	virtual void printState() = 0;
 
-private:
-
 	stringstream ss;
+};
+
+struct StateOpt_Less {
+	//bool operator()(const GameState &lhs, const GameState &rhs) const {
+	//	return lhs.getScore() < rhs.getScore();
+	//}
+	bool operator()(const GameState* lhs, const GameState* rhs) const {
+		int a = rhs->getScore();
+		return lhs->getScore() < rhs->getScore();
+	}
+};
+
+struct StateOpt_Greater {
+	//bool operator()(const GameState &lhs, const GameState &rhs) const {
+	//	return lhs.getScore() > rhs.getScore();
+	//}
+	bool operator()(const GameState* lhs, const GameState* rhs) const {
+		return lhs->getScore() > rhs->getScore();
+	}
 };

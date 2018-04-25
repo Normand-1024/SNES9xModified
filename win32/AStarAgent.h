@@ -43,14 +43,6 @@ public:
 		fprintf(stdout, "PosX << %d PosY << %d Score << %d Timer << %d Death << %d levelComplete << %d\n", playerPosX, playerPosY, marioScore, timer, death, levelComplete);
 	}
 
-	int getScore() const override{
-		if (death) 
-			return 0;
-		if (levelComplete)
-			return INT_MAX;
-		return playerPosX;
-	}
-
 private:
 	int playerPosX;
 	int playerPosY;
