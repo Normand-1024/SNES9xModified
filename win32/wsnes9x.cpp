@@ -230,6 +230,8 @@
 #include "../statemanager.h"
 #include "AVIOutput.h"
 #include "InputCustom.h"
+#include "GameStateInput.h"
+int snes9xGameStateInput;
 
 #include <algorithm>
 #include <vector>
@@ -3399,6 +3401,7 @@ uint16 A_Star(S* state) {
 			currentSet.push_back(state_p);
 
 			//TODO: apply control, rewrite report button function ( processInput -> ControlPadFlagsToS9xReportButtons -> Button)
+			//A button needs to be depressed (same buttons with pressed off) in order to be pressed again
 			step(state_p);
 			control.insert(std::pair<S*, uint16>(state_p, control));
 			fScore.insert(std::pair<S*, int>(state_p, state_p->getScore()));

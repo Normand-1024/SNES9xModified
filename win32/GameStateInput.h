@@ -1,0 +1,1 @@
+extern int snes9xGameStateInput = 0;

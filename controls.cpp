@@ -1855,15 +1855,17 @@ void GenerateControl(uint16& buttons, bool& pressed) {
 	
 	//****counter++;
 
+	/*
 	if (counter >= BUTTONPRESS_COUNT) {
 		counter = 0;
 		bPressed = !bPressed;
 		if (bPressed)
 			currentButtons = 0;//RandomButton();
 	}
+	*/
 
 	//buttons = currentButtons;
-	buttons = SNES_RIGHT_MASK;
+	buttons = snes9xGameStateInput;
 	pressed = bPressed;
 }
 

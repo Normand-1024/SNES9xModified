@@ -223,6 +223,9 @@
 #define PseudoPointerBase		(InvalidControlID - 8)
 #define PseudoButtonBase		(PseudoPointerBase - 256)
 
+//Input for AI
+#include "GameStateInput.h"
+
 typedef struct
 {
 	uint8	type;
