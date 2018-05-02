@@ -35,7 +35,8 @@ public:
 		if (!UnfreezeState(ss))
 			std::cout << "yer dun goofed" << std::endl;
 		ss.swap(temp);
-		}
+		std::cout << "loading finished" << std::endl;
+	}
 
 	void saveState() {
 		ss = FreezeState();

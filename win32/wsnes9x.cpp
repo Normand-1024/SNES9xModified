@@ -231,7 +231,7 @@
 #include "AVIOutput.h"
 #include "InputCustom.h"
 #include "GameStateInput.h"
-int snes9xGameStateInput;
+int snes9xGameStateInput = 0;
 
 #include <algorithm>
 #include <vector>
@@ -3349,7 +3349,8 @@ static void ProcessInput(void)
 /*****************************************************************************/
 /* Game State Update Function                                                */
 /*****************************************************************************/
-void step(GameState* state) {
+void step(GameState* state, uint16 control) {
+	snes9xGameStateInput = control;
 	ProcessInput();
 	S9xMainLoop();
 	state->updateState();
@@ -3361,7 +3362,7 @@ void step(GameState* state) {
 /*****************************************************************************/
 template <class S>
 uint16 A_Star(S* state) {
-	uint16 control_set[] = { SNES_RIGHT_MASK, SNES_Y_MASK, 0 };
+	uint16 control_set[] = { SNES_RIGHT_MASK, SNES_B_MASK, SNES_RIGHT_MASK | SNES_B_MASK , 0 };
 							/*{ SNES_LEFT_MASK, SNES_RIGHT_MASK, SNES_Y_MASK, SNES_B_MASK,
 							SNES_LEFT_MASK | SNES_Y_MASK, SNES_LEFT_MASK | SNES_B_MASK,
 							SNES_RIGHT_MASK | SNES_Y_MASK, SNES_RIGHT_MASK | SNES_B_MASK,
@@ -3379,7 +3380,7 @@ uint16 A_Star(S* state) {
 	auto ms = chrono::duration_cast<chrono::milliseconds>(now - start).count();
 
 	while (!openSet.empty()) {
-		GameState* current = openSet.top();
+		S* current = openSet.top();
 		
 		//Check for time, if over a set time, then return best
 		now = chrono::high_resolution_clock::now();
@@ -3391,19 +3392,18 @@ uint16 A_Star(S* state) {
 		closedSet.push_back(current);
 
 		// Initialize the neighbors
-		for (uint16 control : control_set) {
+		for (uint16 c : control_set) {
 			//Copy current state
 			current->loadState();
-			S simulated_state(*current);
-			S* state_p = &simulated_state;
-
+			fprintf(stdout, "Loaded Current State");
+			S* state_p = new S(*current);
+			
 			//push into current set
 			currentSet.push_back(state_p);
 
-			//TODO: apply control, rewrite report button function ( processInput -> ControlPadFlagsToS9xReportButtons -> Button)
-			//A button needs to be depressed (same buttons with pressed off) in order to be pressed again
-			step(state_p);
-			control.insert(std::pair<S*, uint16>(state_p, control));
+			//apply control
+			step(state_p, c);
+			control.insert(std::pair<S*, uint16>(state_p, c));
 			fScore.insert(std::pair<S*, int>(state_p, state_p->getScore()));
 		}
 
@@ -3418,9 +3418,6 @@ uint16 A_Star(S* state) {
 		}
 
 		//Clear currentSet
-		for (S* s_delete : currentSet) {
-			delete s_delete
-		}
 		currentSet.clear();
 	}
 }
@@ -3461,7 +3458,7 @@ int WINAPI WinMain(
 	{
 		//string dummy;
 		//std::cin >> dummy;
-		step(&SMWState);
+		step(&SMWState, SNES_RIGHT_MASK);//A_Star(&SMWState));
 		SMWState.printState();
 		
 		/*

@@ -1,1 +1,1 @@
-extern int snes9xGameStateInput = 0;
+extern int snes9xGameStateInput;

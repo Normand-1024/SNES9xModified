@@ -1849,27 +1849,32 @@ uint16 RandomButton() {
 	return output;
 }
 
-void GenerateControl(uint16& buttons, bool& pressed) {
+void GenerateControl(uint16& buttons, bool& pressed, bool unpress) {
 	// If COUNT = 8, then the function will return the same button press 
 	// with pressed off for 8 counts, and pressed on for 8 counts, 16 counts for the same button combination in total
-	
+
 	//****counter++;
 
-	/*
-	if (counter >= BUTTONPRESS_COUNT) {
-		counter = 0;
-		bPressed = !bPressed;
-		if (bPressed)
-			currentButtons = 0;//RandomButton();
-	}
-	*/
+	/*if (counter >= BUTTONPRESS_COUNT) {
+	counter = 0;
+	bPressed = !bPressed;
+	if (bPressed)
+	currentButtons = 0;//RandomButton();
+	}*/
 
-	//buttons = currentButtons;
-	buttons = snes9xGameStateInput;
+	if (unpress) {
+		pressed = false;
+		buttons = ~0;
+		return;
+	}
+
+	//currentButtons = RandomButton();
+	buttons = snes9xGameStateInput;//currentButtons;
+	//buttons = SNES_RIGHT_MASK;
 	pressed = bPressed;
 }
 
-void S9xReportButton (uint32 id, bool pressed)
+void S9xReportButton(uint32 id, bool pressed)
 {
 	if (keymap.count(id) == 0)
 		return;
@@ -1883,8 +1888,12 @@ void S9xReportButton (uint32 id, bool pressed)
 		return;
 	}
 
+	//Unpress all the button
+	GenerateControl(keymap[id].button.joypad.buttons, pressed, true);
+	S9xApplyCommand(keymap[id], false, 0);
+
 	//Randomly generate control press
-	GenerateControl(keymap[id].button.joypad.buttons, pressed);
+	GenerateControl(keymap[id].button.joypad.buttons, pressed, false);
 	//fprintf(stdout, "%d\n", (Memory.RAM[0x95] << 8) + Memory.RAM[0x94]);
 
 	if (keymap[id].type == S9xButtonCommand)	// skips the "already-pressed check" unless it's a command, as a hack to work around the following problem:
@@ -1892,7 +1901,7 @@ void S9xReportButton (uint32 id, bool pressed)
 			return;
 
 	keymap[id].button_norpt = pressed;
-	
+
 	S9xApplyCommand(keymap[id], pressed, 0);
 }
 
