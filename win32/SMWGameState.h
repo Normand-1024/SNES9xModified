@@ -1,4 +1,5 @@
 #include "GameState.h"
+#define ANNOYING_STATE_CLOCK 100
 
 class SMWGameState : public GameState {
 public:
@@ -29,14 +30,14 @@ public:
 		death = playerPosY > 60000;//(Memory.RAM[0xDDA] == 0xFF && playerPosY > 6000);
 		levelComplete = (Memory.RAM[0xDDA] == 0xFF && Memory.RAM[0x13D9] == 2);
 
-		/*~~~~~~~~~~~~~~~~~~Below is loading the same state multiple times~~~~~~~~~~~~~~~~~~~~~~
+		/*~~~~~~~~~~~~~~~~~~Below is loading the same state multiple times~~~~~~~~~~~~~~~~~~~~~~			*/
 		clocktick++;
 		if (clocktick >= ANNOYING_STATE_CLOCK) {
-			//loadState();
+			loadState();
+			fprintf(stdout, "STUFF\n");
 			clocktick = 0;
 			save = !save;
 		}
-			*/
 	}
 
 	void printState() override {

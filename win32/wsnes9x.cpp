@@ -3395,7 +3395,6 @@ uint16 A_Star(S* state) {
 		for (uint16 c : control_set) {
 			//Copy current state
 			current->loadState();
-			fprintf(stdout, "Loaded Current State");
 			S* state_p = new S(*current);
 			
 			//push into current set
@@ -3419,6 +3418,12 @@ uint16 A_Star(S* state) {
 
 		//Clear currentSet
 		currentSet.clear();
+	}
+
+	//Clear Memory
+	while (!openSet.empty()) {
+		delete openSet.top();
+		openSet.pop();
 	}
 }
 
@@ -3458,7 +3463,9 @@ int WINAPI WinMain(
 	{
 		//string dummy;
 		//std::cin >> dummy;
-		step(&SMWState, SNES_RIGHT_MASK);//A_Star(&SMWState));
+		//int control = A_Star(&SMWState);
+		//fprintf(stdout, "CONTROL: %d\n", control);
+		step(&SMWState, SNES_RIGHT_MASK);// A_Star(&SMWState));
 		SMWState.printState();
 		
 		/*

@@ -14,7 +14,6 @@
 #include "./snapshot.h"
 #include "memmap.h"
 #include "wsnes9x.h"
-#define ANNOYING_STATE_CLOCK 100
 
 class GameState {
 public:
@@ -35,7 +34,6 @@ public:
 		if (!UnfreezeState(ss))
 			std::cout << "yer dun goofed" << std::endl;
 		ss.swap(temp);
-		std::cout << "loading finished" << std::endl;
 	}
 
 	void saveState() {

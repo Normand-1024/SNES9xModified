@@ -1578,9 +1578,9 @@ bool8 UnfreezeState(std::stringstream& stream)
 		if (result != SUCCESS)
 			break;
 
-		result = UnfreezeBlockCopyFromString(stream, "SND", &local_apu_sound, SPC_SAVE_STATE_BLOCK_SIZE);
-		if (result != SUCCESS)
-			break;
+		//result = UnfreezeBlockCopyFromString(stream, "SND", &local_apu_sound, SPC_SAVE_STATE_BLOCK_SIZE);
+		//if (result != SUCCESS)
+		//	break;
 
 		result = UnfreezeStructCopyFromString(stream, "CTL", &local_control_data, SnapControls, COUNT(SnapControls), version);
 		if (result != SUCCESS)
@@ -1691,7 +1691,7 @@ bool8 UnfreezeState(std::stringstream& stream)
 		uint32 old_flags = CPU.Flags;
 		uint32 sa1_old_flags = SA1.Flags;
 
-		S9xReset();
+		S9xResetSimulation();
 
 		UnfreezeStructFromCopy(&CPU, SnapCPU, COUNT(SnapCPU), local_cpu, version);
 
@@ -1817,7 +1817,7 @@ bool8 UnfreezeState(std::stringstream& stream)
 		CPU.InDMAorHDMA = CPU.InWRAMDMAorHDMA = FALSE;
 		CPU.HDMARanInDMA = 0;
 
-		S9xFixColourBrightness();
+		//S9xFixColourBrightness();
 		IPPU.ColorsChanged = TRUE;
 		IPPU.OBJChanged = TRUE;
 		IPPU.RenderThisFrame = TRUE;
