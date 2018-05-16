@@ -34,7 +34,6 @@ public:
 		clocktick++;
 		if (clocktick >= ANNOYING_STATE_CLOCK) {
 			loadState();
-			fprintf(stdout, "STUFF\n");
 			clocktick = 0;
 			save = !save;
 		}

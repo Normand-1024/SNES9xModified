@@ -3466,7 +3466,7 @@ int WINAPI WinMain(
 		//int control = A_Star(&SMWState);
 		//fprintf(stdout, "CONTROL: %d\n", control);
 		step(&SMWState, SNES_RIGHT_MASK);// A_Star(&SMWState));
-		SMWState.printState();
+		//SMWState.printState();
 		
 		/*
 		ProcessInput();
