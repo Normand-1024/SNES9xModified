@@ -1950,6 +1950,7 @@ bool8 UnfreezeState(std::stringstream& stream)
 	if (local_srtc)				delete[] local_srtc;
 	if (local_rtc_data)			delete[] local_rtc_data;
 	if (local_bsx_data)			delete[] local_bsx_data;
+	if (local_msu1_data)		delete[] local_msu1_data;
 	if (local_screenshot)		delete[] local_screenshot;
 	if (local_movie_data)		delete[] local_movie_data;
 
@@ -2989,6 +2990,7 @@ static int UnfreezeBlockFromString(std::stringstream& stream, const char *name, 
 	{
 		//REVERT_STREAM(stream, rewind, 0);
 		stream.seekg(rewind, stream.beg);
+		delete[] blockbuffer;
 		return (WRONG_FORMAT);
 	}
 
@@ -3002,10 +3004,12 @@ static int UnfreezeBlockFromString(std::stringstream& stream, const char *name, 
 		{
 			//REVERT_STREAM(stream, rewind, 0);
 			stream.seekg(rewind, stream.beg);
+			delete[] blockbuffer;
 			return (WRONG_FORMAT);
 		}
 	}
 
+	delete[] blockbuffer;
 	return (SUCCESS);
 }
 
