@@ -14,7 +14,7 @@ public:
 			//std::copy(str_dir.begin(), str_dir.end(), dir);
 
 			//LoadROM(dir, NULL);
-			FreezeUnfreezeSlot(2, false); 
+			FreezeUnfreezeSlot(0, false); 
 			levelLoaded = true;
 			saveState();
 			//Settings.FrameTime = 500;//4000;//FrameTimings[0];
@@ -31,7 +31,7 @@ public:
 		levelComplete = (Memory.RAM[0xDDA] == 0xFF && Memory.RAM[0x13D9] == 2);
 
 		/*~~~~~~~~~~~~~~~~~~Below is loading the same state multiple times~~~~~~~~~~~~~~~~~~~~~~			*/
-		clocktick++;
+		//clocktick++;
 		if (clocktick >= ANNOYING_STATE_CLOCK) {
 			loadState();
 			clocktick = 0;

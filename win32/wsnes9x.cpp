@@ -3362,7 +3362,7 @@ void step(GameState* state, uint16 control) {
 /*****************************************************************************/
 template <class S>
 uint16 A_Star(S* state) {
-	uint16 control_set[] = { SNES_RIGHT_MASK, SNES_B_MASK, SNES_RIGHT_MASK | SNES_B_MASK , 0 };
+	uint16 control_set[] = { SNES_RIGHT_MASK, SNES_B_MASK, SNES_RIGHT_MASK | SNES_B_MASK };// , 0 };
 							/*{ SNES_LEFT_MASK, SNES_RIGHT_MASK, SNES_Y_MASK, SNES_B_MASK,
 							SNES_LEFT_MASK | SNES_Y_MASK, SNES_LEFT_MASK | SNES_B_MASK,
 							SNES_RIGHT_MASK | SNES_Y_MASK, SNES_RIGHT_MASK | SNES_B_MASK,
@@ -3373,11 +3373,14 @@ uint16 A_Star(S* state) {
 	vector<S*> closedSet, currentSet;
 	map<S*, uint16> control;
 	map<S*, int> fScore;
+	uint16 outputControl;
 
 	openSet.push(state);
 	auto start = chrono::high_resolution_clock::now();
 	auto now = start;
 	auto ms = chrono::duration_cast<chrono::milliseconds>(now - start).count();
+
+	int current_created = 0, current_deleted = 0;
 
 	while (!openSet.empty()) {
 		S* current = openSet.top();
@@ -3385,8 +3388,10 @@ uint16 A_Star(S* state) {
 		//Check for time, if over a set time, then return best
 		now = chrono::high_resolution_clock::now();
 		ms = chrono::duration_cast<chrono::milliseconds>(now - start).count();
-		if (ms >= 1000)
-			return control[current];
+		if (ms >= 1000) {
+			outputControl = control[current];
+			break;
+		}
 
 		openSet.pop();
 		closedSet.push_back(current);
@@ -3399,6 +3404,7 @@ uint16 A_Star(S* state) {
 			
 			//push into current set
 			currentSet.push_back(state_p);
+			current_created++;
 
 			//apply control
 			step(state_p, c);
@@ -3422,9 +3428,15 @@ uint16 A_Star(S* state) {
 
 	//Clear Memory
 	while (!openSet.empty()) {
+		current_deleted++;
 		delete openSet.top();
 		openSet.pop();
 	}
+	for (int i = 1; i < closedSet.size(); i++) {
+		current_deleted++;
+		delete closedSet[i];
+	}
+	return outputControl;
 }
 
 
@@ -3459,14 +3471,21 @@ int WINAPI WinMain(
 	S9xUnmapAllControls();
 	S9xSetupDefaultKeymap();
 
+	int counter = 0;
+
 	while (true)
 	{
 		//string dummy;
 		//std::cin >> dummy;
-		//int control = A_Star(&SMWState);
-		//fprintf(stdout, "CONTROL: %d\n", control);
-		step(&SMWState, SNES_RIGHT_MASK);// A_Star(&SMWState));
-		//SMWState.printState();
+		int control;
+		if (counter > 1) {
+			int control = A_Star(&SMWState);
+			counter++;
+			fprintf(stdout, "CONTROL: %d\n", control);
+		}
+		control = SNES_RIGHT_MASK;
+		step(&SMWState, control);//A_Star(&SMWState));
+		SMWState.printState();
 		
 		/*
 		ProcessInput();
